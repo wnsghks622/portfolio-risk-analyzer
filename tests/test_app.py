@@ -99,3 +99,33 @@ def test_partial_live_failure_still_renders_from_sample(monkeypatch):
     assert not at.error
     assert any("Live data unavailable" in w.value for w in at.warning)
     assert len(at.tabs) == 4
+
+
+def test_link_with_holdings_loads_them_as_custom(monkeypatch):
+    monkeypatch.setattr(risk.data, "_download_live", offline)
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.query_params["p"] = "QQQ:70,TLT:30"
+    at.run()
+    assert not at.exception
+    assert not at.error
+    assert at.selectbox(key="preset").value == "Custom"
+    assert list(at.session_state["holdings"]["Ticker"]) == ["QQQ", "TLT"]
+    assert len(at.tabs) == 4
+
+
+def test_unreadable_link_warns_and_uses_default_preset(monkeypatch):
+    monkeypatch.setattr(risk.data, "_download_live", offline)
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.query_params["p"] = "SPY:lots"
+    at.run()
+    assert not at.exception
+    assert at.selectbox(key="preset").value == "60/40 ETF"
+    assert any("Couldn't read the saved portfolio in this link" in w.value for w in at.warning)
+
+
+def test_save_button_writes_holdings_into_the_link(monkeypatch):
+    monkeypatch.setattr(risk.data, "_download_live", offline)
+    at = new_app()
+    at.button(key="save_link").click().run()
+    assert not at.exception
+    assert at.query_params["p"] == "SPY:60,AGG:40"

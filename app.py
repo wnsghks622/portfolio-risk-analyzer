@@ -12,6 +12,7 @@ import pandas as pd
 import streamlit as st
 
 import charts
+from portfolio_link import decode_holdings, encode_holdings
 from presets import CUSTOM, DEFAULT_PRESET, PRESETS
 from risk import attribution, benchmark, metrics, var
 from risk.data import PriceResult, available_sample_tickers, get_prices, to_returns
@@ -32,6 +33,7 @@ HORIZON_NOTE = (
     "and understates risk when volatility clusters."
 )
 FOOTER = "Assumes constant weights, rebalanced daily."
+LINK_ERROR = "Couldn't read the saved portfolio in this link — showing the default preset."
 
 
 @st.cache_data(ttl=3600, show_spinner="Loading prices…")
@@ -45,14 +47,30 @@ def holdings_frame(preset: str) -> pd.DataFrame:
 
 
 def init_state() -> None:
-    if "preset" not in st.session_state:
-        st.session_state.preset = DEFAULT_PRESET
-        st.session_state.holdings = holdings_frame(DEFAULT_PRESET)
-        st.session_state.editor_version = 0
+    if "preset" in st.session_state:
+        return
+    st.session_state.editor_version = 0
+    st.session_state.link_error = False
+    link = st.query_params.get("p")
+    if link:
+        try:
+            pairs = decode_holdings(link)
+            Portfolio.from_inputs(pairs)  # same validation as typed holdings
+        except ValueError:
+            st.session_state.link_error = True
+        else:
+            st.session_state.preset = CUSTOM
+            st.session_state.holdings = pd.DataFrame(
+                {"Ticker": [t for t, _ in pairs], "Weight %": [w for _, w in pairs]}
+            )
+            return
+    st.session_state.preset = DEFAULT_PRESET
+    st.session_state.holdings = holdings_frame(DEFAULT_PRESET)
 
 
 def on_preset_change() -> None:
     name = st.session_state.preset
+    st.session_state.link_error = False
     if name in PRESETS:
         st.session_state.holdings = holdings_frame(name)
         st.session_state.editor_version += 1  # new editor key discards old edits
@@ -91,6 +109,8 @@ def sidebar() -> dict:
             "Weight %": st.column_config.NumberColumn("Weight %", format="%.2f"),
         },
     )
+    if sb.button("Save as link", key="save_link"):
+        save_link(holdings)
     sb.header("Settings")
     range_label = sb.radio("Date range", list(RANGES), index=2, horizontal=True, key="range")
     conf_label = sb.radio("VaR confidence", list(CONFIDENCE), horizontal=True, key="conf")
@@ -107,6 +127,17 @@ def sidebar() -> dict:
         "rf": rf_pct / 100,
         "benchmark": bench.strip().upper(),
     }
+
+
+def save_link(holdings: pd.DataFrame) -> None:
+    try:
+        portfolio = Portfolio.from_inputs(zip(holdings["Ticker"], holdings["Weight %"]))
+    except ValueError as exc:
+        st.sidebar.error(str(exc))
+        return
+    st.query_params["p"] = encode_holdings(portfolio)
+    st.session_state.link_error = False
+    st.sidebar.success("Saved. Copy the link from your browser's address bar to reopen or share this portfolio.")
 
 
 def render_overview(r: pd.Series, bench_r: pd.Series, bench: str, rf: float) -> None:
@@ -161,6 +192,8 @@ def main() -> None:
     inputs = sidebar()
     st.title("Portfolio Risk Analyzer")
     st.caption("Return, tail-risk, diversification and benchmark analytics for a long-only portfolio.")
+    if st.session_state.get("link_error"):
+        st.warning(LINK_ERROR)
 
     holdings = inputs["holdings"]
     try:
