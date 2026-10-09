@@ -70,15 +70,32 @@ def test_short_history_is_blocked_with_a_message(monkeypatch):
 
 
 def test_all_holdings_missing_shows_error(monkeypatch):
-    def only_qqq(tickers, start, end):
+    def only_benchmark(tickers, start, end):
         idx = pd.bdate_range(end=pd.Timestamp(end) - pd.Timedelta(days=1), periods=300)
         frame = pd.DataFrame(np.nan, index=idx, columns=tickers, dtype=float)
-        if "QQQ" in frame.columns:
-            frame["QQQ"] = np.linspace(100, 130, 300)
+        frame["SPY"] = np.linspace(100, 130, 300)
         return frame
 
-    monkeypatch.setattr(risk.data, "_download_live", only_qqq)
-    at = new_app()
-    at.text_input(key="benchmark").set_value("qqq").run()
+    monkeypatch.setattr(risk.data, "_download_live", only_benchmark)
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.session_state["preset"] = "Custom"
+    at.session_state["holdings"] = pd.DataFrame({"Ticker": ["ZZZZ", "YYYY"], "Weight %": [50.0, 50.0]})
+    at.session_state["editor_version"] = 0
+    at.run()
     assert not at.exception
-    assert any("None of your holdings have price data" in e.value for e in at.error)
+    assert any("None of your holdings have price data (ZZZZ, YYYY)" in e.value for e in at.error)
+
+
+def test_partial_live_failure_still_renders_from_sample(monkeypatch):
+    def spy_throttled(tickers, start, end):
+        idx = pd.bdate_range(end=pd.Timestamp(end) - pd.Timedelta(days=1), periods=300)
+        frame = pd.DataFrame(np.nan, index=idx, columns=tickers, dtype=float)
+        frame["AGG"] = np.linspace(100, 105, 300)
+        return frame
+
+    monkeypatch.setattr(risk.data, "_download_live", spy_throttled)
+    at = new_app()
+    assert not at.exception
+    assert not at.error
+    assert any("Live data unavailable" in w.value for w in at.warning)
+    assert len(at.tabs) == 4

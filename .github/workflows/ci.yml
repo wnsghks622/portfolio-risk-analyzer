@@ -36,4 +36,5 @@ jobs:
           HF_SPACE: ${{ vars.HF_SPACE }}
         run: |
           git lfs install --local
+          git lfs fetch --all origin
           git push --force "https://${HF_SPACE%%/*}:${HF_TOKEN}@huggingface.co/spaces/${HF_SPACE}" HEAD:main

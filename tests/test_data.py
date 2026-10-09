@@ -133,3 +133,14 @@ def test_to_returns():
 
 def test_available_sample_tickers(sample_path):
     assert data.available_sample_tickers(sample_path) == ["AAPL", "AGG", "SPY"]
+
+
+def test_partial_live_failure_on_a_sample_ticker_falls_back_to_sample(monkeypatch, sample_path):
+    # Yahoo throttles per ticker: AGG comes back empty although it is a known-good sample ticker
+    live = make_prices(["SPY", "AGG"], start="2023-01-02", end="2023-12-29")
+    live["AGG"] = np.nan
+    monkeypatch.setattr(data, "_download_live", lambda tickers, start, end: live)
+    result = data.get_prices(["SPY", "AGG"], date(2021, 1, 1), date(2024, 1, 1), sample_path=sample_path)
+    assert result.source == "sample"
+    assert result.missing == []
+    assert list(result.prices.columns) == ["SPY", "AGG"]

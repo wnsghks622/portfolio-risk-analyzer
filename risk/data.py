@@ -85,6 +85,12 @@ def _align(raw: pd.DataFrame, tickers: list[str], source: Literal["live", "sampl
     )
 
 
+def _sample_ticker_failed(raw: pd.DataFrame, tickers: list[str], path: Path) -> bool:
+    """A ticker the sample holds is known to exist, so no live data for it means the fetch failed."""
+    missing = [t for t in tickers if t not in raw.columns or raw[t].isna().all()]
+    return bool(missing) and bool(set(missing) & set(load_sample(path).columns))
+
+
 def get_prices(
     tickers: list[str], start: date, end: date, sample_path: Path = SAMPLE_PATH
 ) -> PriceResult:
@@ -94,7 +100,7 @@ def get_prices(
         raw = _download_live(wanted, start, end)
     except Exception:
         raw = pd.DataFrame()
-    if raw.empty or raw.isna().all().all():
+    if raw.empty or raw.isna().all().all() or _sample_ticker_failed(raw, wanted, sample_path):
         source = "sample"
         raw = _sample_window(wanted, start, end, sample_path)
     return _align(raw, wanted, source)

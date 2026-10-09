@@ -26,3 +26,8 @@ def test_ci_checks_out_lfs_and_deploys_only_after_tests():
     assert "lfs: true" in ci
     assert "needs: test" in ci
     assert 'python-version: "3.12"' in ci
+
+
+def test_deploy_fetches_all_lfs_objects_before_force_push():
+    ci = read(".github/workflows/ci.yml")
+    assert ci.index("git lfs fetch --all") < ci.index("git push --force")
