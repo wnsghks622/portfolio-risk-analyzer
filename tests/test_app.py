@@ -46,7 +46,7 @@ def test_app_renders_each_preset_from_sample_data(monkeypatch, preset):
     assert not at.error
     assert list(at.session_state["holdings"]["Ticker"]) == list(PRESETS[preset])
     assert any("Live data unavailable" in w.value for w in at.warning)
-    assert len(at.tabs) == 4
+    assert len(at.tabs) == 5
 
 
 def test_99_percent_ten_day_path_shows_horizon_note(monkeypatch):
@@ -98,7 +98,7 @@ def test_partial_live_failure_still_renders_from_sample(monkeypatch):
     assert not at.exception
     assert not at.error
     assert any("Live data unavailable" in w.value for w in at.warning)
-    assert len(at.tabs) == 4
+    assert len(at.tabs) == 5
 
 
 def test_link_with_holdings_loads_them_as_custom(monkeypatch):
@@ -110,7 +110,7 @@ def test_link_with_holdings_loads_them_as_custom(monkeypatch):
     assert not at.error
     assert at.selectbox(key="preset").value == "Custom"
     assert list(at.session_state["holdings"]["Ticker"]) == ["QQQ", "TLT"]
-    assert len(at.tabs) == 4
+    assert len(at.tabs) == 5
 
 
 def test_unreadable_link_warns_and_uses_default_preset(monkeypatch):
@@ -162,3 +162,13 @@ def test_save_link_keeps_cash_setting(monkeypatch):
     at.button(key="save_link").click().run()
     assert at.query_params["p"] == "SPY:60,AGG:20"
     assert at.query_params["cash"] == "1"
+
+
+def test_guide_tab_explains_terms_with_live_numbers(monkeypatch):
+    monkeypatch.setattr(risk.data, "_download_live", offline)
+    at = new_app()
+    assert not at.exception
+    assert at.tabs[4].label == "Guide"
+    guide_text = " ".join(" ".join(m.value for m in at.tabs[4].markdown).split()).replace("\\$", "$")
+    assert "Value at Risk" in guide_text
+    assert "on a $10,000 portfolio" in guide_text

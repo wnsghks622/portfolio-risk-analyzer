@@ -29,6 +29,8 @@ An interactive dashboard that measures how risky a stock/ETF portfolio is: retur
 - **VaR / CVaR:** historical, parametric (normal) and Monte Carlo (Student-t) VaR and CVaR side by side, at 95%/99% and 1-day/10-day.
 - **Diversification:** correlation heatmap; each holding's weight next to its share of total risk.
 - **Benchmark:** beta, alpha, tracking error; rolling 6-month beta.
+- **Cash option:** "Treat unallocated weight as cash" reads weights as % of the portfolio; anything below 100% is held as cash earning the risk-free rate (otherwise weights are rescaled proportionally to 100%).
+- **Guide:** a tab that explains every term (VaR, CVaR, CAGR, Sharpe, drawdown, beta, ...) in plain language, with a "Your portfolio" line using the current numbers on a $10,000 example; every KPI tile also has a (?) tooltip.
 - **Shareable portfolios:** "Save as link" puts your holdings in the page URL (`?p=SPY:60,AGG:40`). Bookmark or send the link to reopen the same portfolio; nothing is stored on the server.
 
 ## Methodology
@@ -72,6 +74,7 @@ pytest
 app.py          Streamlit UI (wiring only)
 charts.py       Plotly figures
 presets.py      preset portfolios
+guide.py        plain-language Guide text and KPI tooltips
 portfolio_link.py  encode/decode holdings in shareable links
 risk/           pure analytics package (no Streamlit)
   data.py         live prices + sample fallback

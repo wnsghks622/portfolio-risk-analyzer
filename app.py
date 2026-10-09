@@ -12,6 +12,7 @@ import pandas as pd
 import streamlit as st
 
 import charts
+from guide import TOOLTIPS, GuideStats, sections
 from portfolio_link import decode_holdings, encode_holdings
 from presets import CUSTOM, DEFAULT_PRESET, PRESETS
 from risk import attribution, benchmark, metrics, var
@@ -153,17 +154,16 @@ def save_link(holdings: pd.DataFrame, cash: bool) -> None:
 
 def render_overview(r: pd.Series, bench_r: pd.Series, bench: str, rf: float) -> None:
     cols = st.columns(5)
-    cols[0].metric("CAGR", pct(metrics.cagr(r)))
-    cols[1].metric("Volatility", pct(metrics.annualized_vol(r)))
-    cols[2].metric("Sharpe", ratio(metrics.sharpe(r, rf)))
-    cols[3].metric("Sortino", ratio(metrics.sortino(r, rf)))
-    cols[4].metric("Max drawdown", pct(metrics.max_drawdown(r)))
+    cols[0].metric("CAGR", pct(metrics.cagr(r)), help=TOOLTIPS["CAGR"])
+    cols[1].metric("Volatility", pct(metrics.annualized_vol(r)), help=TOOLTIPS["Volatility"])
+    cols[2].metric("Sharpe", ratio(metrics.sharpe(r, rf)), help=TOOLTIPS["Sharpe"])
+    cols[3].metric("Sortino", ratio(metrics.sortino(r, rf)), help=TOOLTIPS["Sortino"])
+    cols[4].metric("Max drawdown", pct(metrics.max_drawdown(r)), help=TOOLTIPS["Max drawdown"])
     st.plotly_chart(charts.equity_curve_fig(metrics.equity_curve(r), metrics.equity_curve(bench_r), bench))
     st.plotly_chart(charts.drawdown_fig(metrics.drawdown_series(r)))
 
 
-def render_tail_risk(asset_returns: pd.DataFrame, weights: pd.Series, r: pd.Series, inputs: dict) -> None:
-    table, nu = var.var_table(asset_returns, weights, inputs["conf"], inputs["days"])
+def render_tail_risk(table: pd.DataFrame, nu: float, r: pd.Series, inputs: dict) -> None:
     st.subheader(f"{inputs['horizon_label']} loss at {inputs['conf_label']} confidence")
     st.dataframe(table.map(lambda x: f"{x:.2%}"))
     st.caption(
@@ -177,25 +177,68 @@ def render_tail_risk(asset_returns: pd.DataFrame, weights: pd.Series, r: pd.Seri
     st.plotly_chart(charts.var_histogram_fig(r, hist.var, hist.cvar, inputs["conf"]))
 
 
-def render_diversification(asset_returns: pd.DataFrame, weights: pd.Series) -> None:
+def render_diversification(corr: pd.DataFrame, rc: pd.DataFrame) -> None:
     left, right = st.columns(2)
     with left:
-        risky = asset_returns.drop(columns=[CASH], errors="ignore")  # cash never moves: correlation undefined
-        st.plotly_chart(charts.correlation_heatmap_fig(attribution.correlation_matrix(risky)))
+        st.plotly_chart(charts.correlation_heatmap_fig(corr))
     with right:
-        st.plotly_chart(charts.risk_contribution_fig(attribution.risk_contribution(asset_returns, weights)))
+        st.plotly_chart(charts.risk_contribution_fig(rc))
 
 
-def render_benchmark(r: pd.Series, bench_r: pd.Series, bench: str, rf: float) -> None:
-    fit = benchmark.capm(r, bench_r, rf)
+def render_benchmark(r: pd.Series, bench_r: pd.Series, bench: str, fit: benchmark.CapmResult, te: float) -> None:
     cols = st.columns(3)
-    cols[0].metric("Beta", ratio(fit.beta))
-    cols[1].metric("Alpha (annualized)", pct(fit.alpha))
-    cols[2].metric("Tracking error", pct(benchmark.tracking_error(r, bench_r)))
+    cols[0].metric("Beta", ratio(fit.beta), help=TOOLTIPS["Beta"])
+    cols[1].metric("Alpha (annualized)", pct(fit.alpha), help=TOOLTIPS["Alpha (annualized)"])
+    cols[2].metric("Tracking error", pct(te), help=TOOLTIPS["Tracking error"])
     if len(r) < ROLLING_WINDOW:
         st.info(f"Rolling beta needs at least {ROLLING_WINDOW} days of returns.")
     else:
         st.plotly_chart(charts.rolling_beta_fig(benchmark.rolling_beta(r, bench_r, ROLLING_WINDOW), bench))
+
+
+def build_guide_stats(
+    r: pd.Series, weights: pd.Series, inputs: dict, table: pd.DataFrame, nu: float,
+    corr: pd.DataFrame, rc: pd.DataFrame, fit: benchmark.CapmResult, te: float, bench: str,
+) -> GuideStats:
+    risk_share = rc["pct_of_risk"]
+    top = risk_share.idxmax() if risk_share.notna().any() else weights.index[0]
+    return GuideStats(
+        cagr=metrics.cagr(r),
+        growth=float(metrics.equity_curve(r, start=1.0).iloc[-1]),
+        years=len(r) / metrics.TRADING_DAYS,
+        vol=metrics.annualized_vol(r),
+        sharpe=metrics.sharpe(r, inputs["rf"]),
+        sortino=metrics.sortino(r, inputs["rf"]),
+        max_drawdown=metrics.max_drawdown(r),
+        rf=inputs["rf"],
+        conf=inputs["conf"],
+        days=inputs["days"],
+        var=float(table.loc[var.HISTORICAL, "VaR"]),
+        cvar=float(table.loc[var.HISTORICAL, "CVaR"]),
+        var_normal=float(table.loc[var.PARAMETRIC, "VaR"]),
+        var_t=float(table.loc[var.MONTE_CARLO, "VaR"]),
+        df=nu,
+        avg_corr=attribution.average_correlation(corr),
+        n_assets=len(corr),
+        top_ticker=str(top),
+        top_weight=float(weights[top]),
+        top_risk=float(risk_share[top]),
+        beta=fit.beta,
+        alpha=fit.alpha,
+        tracking_error=te,
+        benchmark=bench,
+        cash_weight=float(weights.get(CASH, 0.0)),
+    )
+
+
+def render_guide(stats: GuideStats) -> None:
+    st.caption(
+        "Plain-language explanations of every number in this app. The \"Your portfolio\" lines use "
+        "your current settings and a \\$10,000 example."
+    )
+    for heading, body in sections(stats):
+        st.subheader(heading)
+        st.markdown(body)
 
 
 def main() -> None:
@@ -262,17 +305,26 @@ def main() -> None:
     st.sidebar.caption("Normalized weights")
     st.sidebar.dataframe((weights * 100).round(2).rename("Weight %"))
 
-    overview, tail, diversification, bench_tab = st.tabs(
-        ["Overview", "VaR / CVaR", "Diversification", "Benchmark"]
+    table, nu = var.var_table(asset_returns, weights, inputs["conf"], inputs["days"])
+    # cash never moves, so its correlation is undefined: leave it out of the heatmap
+    corr = attribution.correlation_matrix(asset_returns.drop(columns=[CASH], errors="ignore"))
+    rc = attribution.risk_contribution(asset_returns, weights)
+    fit = benchmark.capm(r, bench_r, inputs["rf"])
+    te = benchmark.tracking_error(r, bench_r)
+
+    overview, tail, diversification, bench_tab, guide_tab = st.tabs(
+        ["Overview", "VaR / CVaR", "Diversification", "Benchmark", "Guide"]
     )
     with overview:
         render_overview(r, bench_r, bench, inputs["rf"])
     with tail:
-        render_tail_risk(asset_returns, weights, r, inputs)
+        render_tail_risk(table, nu, r, inputs)
     with diversification:
-        render_diversification(asset_returns, weights)
+        render_diversification(corr, rc)
     with bench_tab:
-        render_benchmark(r, bench_r, bench, inputs["rf"])
+        render_benchmark(r, bench_r, bench, fit, te)
+    with guide_tab:
+        render_guide(build_guide_stats(r, weights, inputs, table, nu, corr, rc, fit, te, bench))
     st.caption(FOOTER)
 
 

@@ -61,3 +61,13 @@ def test_cash_carries_no_risk():
     rc = attribution.risk_contribution(returns, pd.Series({"A": 0.4, "B": 0.4, "Cash": 0.2}))
     assert rc.loc["Cash", "pct_of_risk"] == pytest.approx(0.0, abs=1e-9)
     assert rc["pct_of_risk"].sum() == pytest.approx(1.0)
+
+
+def test_average_correlation_uses_off_diagonal_pairs():
+    corr = pd.DataFrame([[1.0, 0.2, 0.4], [0.2, 1.0, 0.6], [0.4, 0.6, 1.0]], index=list("ABC"), columns=list("ABC"))
+    assert attribution.average_correlation(corr) == pytest.approx(0.4)
+
+
+def test_average_correlation_of_one_asset_is_nan():
+    corr = pd.DataFrame([[1.0]], index=["A"], columns=["A"])
+    assert np.isnan(attribution.average_correlation(corr))

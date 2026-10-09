@@ -28,3 +28,12 @@ def risk_contribution(returns: pd.DataFrame, weights: pd.Series) -> pd.DataFrame
         {"weight": w, "contribution": contribution, "pct_of_risk": pct},
         index=weights.index,
     )
+
+
+def average_correlation(corr: pd.DataFrame) -> float:
+    """Mean correlation over all distinct pairs; NaN with fewer than two assets."""
+    n = len(corr)
+    if n < 2:
+        return float("nan")
+    values = corr.to_numpy(dtype=float)
+    return float(np.nanmean(values[~np.eye(n, dtype=bool)]))
