@@ -142,3 +142,13 @@ def test_single_asset_portfolio_works():
     table, _ = var.var_table(returns, pd.Series({"SPY": 1.0}), 0.99, 1)
     assert table.notna().all().all()
     assert (table > 0).all().all()
+
+
+def test_monte_carlo_handles_zero_variance_cash_column():
+    returns = two_asset_returns()
+    returns["Cash"] = 0.04 / 252
+    w = pd.Series({"A": 0.4, "B": 0.4, "Cash": 0.2})
+    table, _ = var.var_table(returns, w, 0.95, 1)
+    assert table.notna().all().all()
+    no_cash, _ = var.var_table(returns[["A", "B"]], pd.Series({"A": 0.5, "B": 0.5}), 0.95, 1)
+    assert table.loc["Parametric (normal)", "VaR"] < no_cash.loc["Parametric (normal)", "VaR"]

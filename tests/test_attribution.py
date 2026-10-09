@@ -53,3 +53,11 @@ def test_correlation_matrix_is_symmetric_with_unit_diagonal():
     assert np.diag(corr.to_numpy()) == pytest.approx([1.0, 1.0, 1.0])
     assert corr.to_numpy() == pytest.approx(corr.to_numpy().T)
     assert list(corr.columns) == ["A", "B", "C"]
+
+
+def test_cash_carries_no_risk():
+    returns = correlated_returns()[["A", "B"]].copy()
+    returns["Cash"] = 0.04 / 252
+    rc = attribution.risk_contribution(returns, pd.Series({"A": 0.4, "B": 0.4, "Cash": 0.2}))
+    assert rc.loc["Cash", "pct_of_risk"] == pytest.approx(0.0, abs=1e-9)
+    assert rc["pct_of_risk"].sum() == pytest.approx(1.0)

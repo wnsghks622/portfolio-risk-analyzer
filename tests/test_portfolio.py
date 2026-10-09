@@ -1,6 +1,6 @@
 import pytest
 
-from risk.portfolio import Portfolio
+from risk.portfolio import CASH, Portfolio
 
 
 def test_weights_are_normalized_to_one():
@@ -74,3 +74,44 @@ def test_weight_series():
     assert list(s.index) == ["A", "B"]
     assert s.tolist() == pytest.approx([0.5, 0.5])
     assert s.name == "weight"
+
+
+def test_cash_option_fills_the_remainder():
+    p = Portfolio.from_inputs([("SPY", 60), ("AGG", 20)], cash_remainder=True)
+    assert p.tickers == ("SPY", "AGG", CASH)
+    assert p.weights == pytest.approx((0.6, 0.2, 0.2))
+    assert p.input_total == pytest.approx(80)
+
+
+def test_cash_option_at_exactly_100_adds_no_cash():
+    p = Portfolio.from_inputs([("SPY", 60), ("AGG", 40)], cash_remainder=True)
+    assert p.tickers == ("SPY", "AGG")
+
+
+def test_cash_option_over_100_scales_down_without_cash():
+    p = Portfolio.from_inputs([("SPY", 90), ("AGG", 30)], cash_remainder=True)
+    assert p.tickers == ("SPY", "AGG")
+    assert p.weights == pytest.approx((0.75, 0.25))
+    assert p.input_total == pytest.approx(120)
+
+
+def test_cash_option_off_keeps_proportional_scaling():
+    p = Portfolio.from_inputs([("SPY", 60), ("AGG", 20)])
+    assert p.tickers == ("SPY", "AGG")
+    assert p.weights == pytest.approx((0.75, 0.25))
+
+
+def test_dropping_with_cash_rescales_the_rest():
+    p = Portfolio.from_inputs([("SPY", 60), ("AGG", 20)], cash_remainder=True).drop(["AGG"])
+    assert p.tickers == ("SPY", CASH)
+    assert p.weights == pytest.approx((0.75, 0.25))
+
+
+def test_dropping_every_real_holding_does_not_leave_cash_only():
+    with pytest.raises(ValueError, match="None of the holdings have price data"):
+        Portfolio.from_inputs([("SPY", 60)], cash_remainder=True).drop(["SPY"])
+
+
+def test_typed_cash_ticker_is_an_ordinary_ticker():
+    p = Portfolio.from_inputs([("cash", 50), ("SPY", 30)], cash_remainder=True)
+    assert p.tickers == ("CASH", "SPY", CASH)

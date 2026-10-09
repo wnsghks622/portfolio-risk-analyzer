@@ -5,6 +5,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from risk.portfolio import CASH
+
 TRADING_DAYS = 252
 _EPS = 1e-12
 
@@ -19,6 +21,13 @@ def portfolio_returns(returns: pd.DataFrame, weights: pd.Series) -> pd.Series:
     """Daily portfolio return with constant weights (rebalanced daily)."""
     values = returns[list(weights.index)].to_numpy() @ weights.to_numpy(dtype=float)
     return pd.Series(values, index=returns.index, name="Portfolio")
+
+
+def add_cash(returns: pd.DataFrame, rf: float) -> pd.DataFrame:
+    """Add a CASH column that earns the daily risk-free rate with zero volatility."""
+    out = returns.copy()
+    out[CASH] = rf / TRADING_DAYS
+    return out
 
 
 def equity_curve(r: pd.Series, start: float = 100.0) -> pd.Series:

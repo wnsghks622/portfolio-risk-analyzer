@@ -129,3 +129,36 @@ def test_save_button_writes_holdings_into_the_link(monkeypatch):
     at.button(key="save_link").click().run()
     assert not at.exception
     assert at.query_params["p"] == "SPY:60,AGG:40"
+
+
+def test_cash_link_adds_cash_holding(monkeypatch):
+    monkeypatch.setattr(risk.data, "_download_live", offline)
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.query_params["p"] = "SPY:60,AGG:20"
+    at.query_params["cash"] = "1"
+    at.run()
+    assert not at.exception
+    assert not at.error
+    assert at.checkbox(key="cash").value is True
+    assert any("Cash" in list(df.value.index) for df in at.dataframe)
+
+
+def test_cash_option_over_100_explains_scaling(monkeypatch):
+    monkeypatch.setattr(risk.data, "_download_live", offline)
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.query_params["p"] = "SPY:90,AGG:30"
+    at.query_params["cash"] = "1"
+    at.run()
+    assert not at.exception
+    assert any("scaled to 100%, no cash" in i.value for i in at.info)
+
+
+def test_save_link_keeps_cash_setting(monkeypatch):
+    monkeypatch.setattr(risk.data, "_download_live", offline)
+    at = AppTest.from_file(APP, default_timeout=60)
+    at.query_params["p"] = "SPY:60,AGG:20"
+    at.query_params["cash"] = "1"
+    at.run()
+    at.button(key="save_link").click().run()
+    assert at.query_params["p"] == "SPY:60,AGG:20"
+    assert at.query_params["cash"] == "1"

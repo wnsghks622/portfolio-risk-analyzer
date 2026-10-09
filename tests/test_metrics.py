@@ -79,3 +79,18 @@ def test_drawdown_counts_loss_from_initial_capital():
 
 def test_no_drawdown_when_always_rising():
     assert metrics.max_drawdown(series([0.01, 0.02])) == 0.0
+
+
+def test_add_cash_column_earns_daily_risk_free():
+    returns = pd.DataFrame({"A": [0.01, -0.02, 0.005]}, index=pd.bdate_range("2024-01-01", periods=3))
+    out = metrics.add_cash(returns, 0.0504)
+    assert list(out.columns) == ["A", "Cash"]
+    assert out["Cash"].tolist() == pytest.approx([0.0002] * 3)
+    assert list(returns.columns) == ["A"]
+
+
+def test_half_cash_halves_volatility():
+    a = pd.DataFrame({"A": np.random.default_rng(0).normal(0, 0.01, 500)}, index=pd.bdate_range("2020-01-01", periods=500))
+    with_cash = metrics.add_cash(a, 0.04)
+    r = metrics.portfolio_returns(with_cash, pd.Series({"A": 0.5, "Cash": 0.5}))
+    assert metrics.annualized_vol(r) == pytest.approx(0.5 * metrics.annualized_vol(a["A"]))

@@ -35,3 +35,8 @@ def test_decode_rejects_too_many_holdings():
     text = ",".join(f"T{i}:1" for i in range(MAX_HOLDINGS + 1))
     with pytest.raises(ValueError, match="at most 50"):
         decode_holdings(text)
+
+
+def test_encode_leaves_cash_out_of_the_holdings():
+    p = Portfolio.from_inputs([("SPY", 60), ("AGG", 20)], cash_remainder=True)
+    assert encode_holdings(p) == "SPY:60,AGG:20"

@@ -16,7 +16,7 @@ from portfolio_link import decode_holdings, encode_holdings
 from presets import CUSTOM, DEFAULT_PRESET, PRESETS
 from risk import attribution, benchmark, metrics, var
 from risk.data import PriceResult, available_sample_tickers, get_prices, to_returns
-from risk.portfolio import Portfolio
+from risk.portfolio import CASH, Portfolio
 
 RANGES = {"1Y": 1, "3Y": 3, "5Y": 5, "10Y": 10}
 CONFIDENCE = {"95%": 0.95, "99%": 0.99}
@@ -51,6 +51,7 @@ def init_state() -> None:
         return
     st.session_state.editor_version = 0
     st.session_state.link_error = False
+    st.session_state.cash = st.query_params.get("cash") == "1"
     link = st.query_params.get("p")
     if link:
         try:
@@ -109,8 +110,13 @@ def sidebar() -> dict:
             "Weight %": st.column_config.NumberColumn("Weight %", format="%.2f"),
         },
     )
+    cash = sb.checkbox(
+        "Treat unallocated weight as cash",
+        key="cash",
+        help="Weights are read as % of the portfolio; anything below 100% is held as cash earning the risk-free rate.",
+    )
     if sb.button("Save as link", key="save_link"):
-        save_link(holdings)
+        save_link(holdings, cash)
     sb.header("Settings")
     range_label = sb.radio("Date range", list(RANGES), index=2, horizontal=True, key="range")
     conf_label = sb.radio("VaR confidence", list(CONFIDENCE), horizontal=True, key="conf")
@@ -119,6 +125,7 @@ def sidebar() -> dict:
     bench = sb.text_input("Benchmark", value="SPY", key="benchmark")
     return {
         "holdings": holdings,
+        "cash": cash,
         "years": RANGES[range_label],
         "conf": CONFIDENCE[conf_label],
         "conf_label": conf_label,
@@ -129,13 +136,17 @@ def sidebar() -> dict:
     }
 
 
-def save_link(holdings: pd.DataFrame) -> None:
+def save_link(holdings: pd.DataFrame, cash: bool) -> None:
     try:
-        portfolio = Portfolio.from_inputs(zip(holdings["Ticker"], holdings["Weight %"]))
+        portfolio = Portfolio.from_inputs(zip(holdings["Ticker"], holdings["Weight %"]), cash_remainder=cash)
     except ValueError as exc:
         st.sidebar.error(str(exc))
         return
     st.query_params["p"] = encode_holdings(portfolio)
+    if cash:
+        st.query_params["cash"] = "1"
+    elif "cash" in st.query_params:
+        del st.query_params["cash"]
     st.session_state.link_error = False
     st.sidebar.success("Saved. Copy the link from your browser's address bar to reopen or share this portfolio.")
 
@@ -169,7 +180,8 @@ def render_tail_risk(asset_returns: pd.DataFrame, weights: pd.Series, r: pd.Seri
 def render_diversification(asset_returns: pd.DataFrame, weights: pd.Series) -> None:
     left, right = st.columns(2)
     with left:
-        st.plotly_chart(charts.correlation_heatmap_fig(attribution.correlation_matrix(asset_returns)))
+        risky = asset_returns.drop(columns=[CASH], errors="ignore")  # cash never moves: correlation undefined
+        st.plotly_chart(charts.correlation_heatmap_fig(attribution.correlation_matrix(risky)))
     with right:
         st.plotly_chart(charts.risk_contribution_fig(attribution.risk_contribution(asset_returns, weights)))
 
@@ -197,10 +209,14 @@ def main() -> None:
 
     holdings = inputs["holdings"]
     try:
-        portfolio = Portfolio.from_inputs(zip(holdings["Ticker"], holdings["Weight %"]))
+        portfolio = Portfolio.from_inputs(
+            zip(holdings["Ticker"], holdings["Weight %"]), cash_remainder=inputs["cash"]
+        )
     except ValueError as exc:
         st.error(str(exc))
         st.stop()
+    if inputs["cash"] and portfolio.input_total > 100:
+        st.info(f"Weights add to {portfolio.input_total:.4g}%: scaled to 100%, no cash.")
     bench = inputs["benchmark"]
     if not bench:
         st.error("Enter a benchmark ticker.")
@@ -208,7 +224,8 @@ def main() -> None:
 
     end = date.today()
     start = (pd.Timestamp(end) - pd.DateOffset(years=inputs["years"])).date()
-    result = load_prices((*portfolio.tickers, bench), start, end)
+    tickers = tuple(t for t in portfolio.tickers if t != CASH)
+    result = load_prices((*tickers, bench), start, end)
 
     if result.source == "sample" and result.as_of is not None:
         st.warning(f"Live data unavailable — showing bundled sample through {result.as_of:%Y-%m-%d}.")
@@ -229,7 +246,7 @@ def main() -> None:
             f"(shortest available history: {result.limiting_ticker})."
         )
 
-    returns = to_returns(result.prices)
+    returns = metrics.add_cash(to_returns(result.prices), inputs["rf"])
     if len(returns) < MIN_RETURN_DAYS:
         st.error(
             f"Only {len(returns)} days of returns available; at least {MIN_RETURN_DAYS} "

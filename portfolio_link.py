@@ -8,7 +8,7 @@ from __future__ import annotations
 import math
 import re
 
-from risk.portfolio import Portfolio
+from risk.portfolio import CASH, Portfolio
 
 MAX_HOLDINGS = 50
 _TICKER = re.compile(r"^[A-Z0-9.^=-]{1,15}$")
@@ -18,6 +18,7 @@ def encode_holdings(portfolio: Portfolio) -> str:
     return ",".join(
         f"{ticker}:{round(weight * 100, 2):g}"
         for ticker, weight in zip(portfolio.tickers, portfolio.weights)
+        if ticker != CASH
     )
 
 
