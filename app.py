@@ -12,7 +12,7 @@ import pandas as pd
 import streamlit as st
 
 import charts
-from guide import TOOLTIPS, GuideStats, sections
+from guide import TOOLTIPS, GuideStats, assumptions, cards
 from portfolio_link import decode_holdings, encode_holdings
 from presets import CUSTOM, DEFAULT_PRESET, PRESETS
 from risk import attribution, benchmark, metrics, var
@@ -231,14 +231,26 @@ def build_guide_stats(
     )
 
 
+TONE_COLORS = {"good": "green", "ok": "orange", "bad": "red", "info": "blue"}
+
+
 def render_guide(stats: GuideStats) -> None:
     st.caption(
-        "Plain-language explanations of every number in this app. The \"Your portfolio\" lines use "
-        "your current settings and a \\$10,000 example."
+        "Your numbers at a glance. Open \"Learn more\" on any card for the full explanation. "
+        "Dollar figures use a \\$10,000 example."
     )
-    for heading, body in sections(stats):
-        st.subheader(heading)
-        st.markdown(body)
+    groups = cards(stats)
+    for tab, items in zip(st.tabs(list(groups)), groups.values()):
+        with tab:
+            columns = st.columns(2)
+            for i, card in enumerate(items):
+                with columns[i % 2].container(border=True):
+                    st.metric(card.term, card.value)
+                    st.markdown(f":{TONE_COLORS[card.tone]}-badge[{card.verdict}] {card.summary}")
+                    with st.expander("Learn more"):
+                        st.markdown(card.details)
+    with st.expander("Assumptions behind these numbers"):
+        st.markdown(assumptions(stats))
 
 
 def main() -> None:
