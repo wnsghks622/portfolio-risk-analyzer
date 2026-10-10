@@ -13,7 +13,7 @@ short_description: Portfolio VaR, CVaR, drawdown and risk attribution
 
 [![CI](https://github.com/wnsghks622/portfolio-risk-analyzer/actions/workflows/ci.yml/badge.svg)](https://github.com/wnsghks622/portfolio-risk-analyzer/actions/workflows/ci.yml)
 
-**Live demo:** https://huggingface.co/spaces/wnsghks622/portfolio-risk-analyzer
+**Live demo:** https://huggingface.co/spaces/wnsghks/portfolio-risk-analyzer
 
 An interactive dashboard that measures how risky a stock/ETF portfolio is: returns and drawdowns, tail risk (VaR and CVaR by three methods), where the risk comes from, and how the portfolio moves against a benchmark. Pick a preset or type your own holdings.
 
