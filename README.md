@@ -1,19 +1,6 @@
----
-title: Portfolio Risk Analyzer
-emoji: 📉
-colorFrom: blue
-colorTo: indigo
-sdk: docker
-app_port: 7860
-pinned: false
-short_description: Portfolio VaR, CVaR, drawdown and risk attribution
----
-
 # Portfolio Risk Analyzer
 
 [![CI](https://github.com/wnsghks622/portfolio-risk-analyzer/actions/workflows/ci.yml/badge.svg)](https://github.com/wnsghks622/portfolio-risk-analyzer/actions/workflows/ci.yml)
-
-**Live demo:** https://huggingface.co/spaces/wnsghks/portfolio-risk-analyzer
 
 An interactive dashboard that measures how risky a stock/ETF portfolio is: returns and drawdowns, tail risk (VaR and CVaR by three methods), where the risk comes from, and how the portfolio moves against a benchmark. Pick a preset or type your own holdings.
 
@@ -66,6 +53,13 @@ source .venv/Scripts/activate     # macOS/Linux: source .venv/bin/activate
 pip install -r requirements-dev.txt
 streamlit run app.py
 pytest
+```
+
+Or with Docker:
+
+```bash
+docker build -t portfolio-risk-analyzer .
+docker run --rm -p 8501:8501 portfolio-risk-analyzer   # then open http://localhost:8501
 ```
 
 ## Project layout

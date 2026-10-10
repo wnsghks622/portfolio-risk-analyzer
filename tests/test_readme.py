@@ -8,18 +8,16 @@ def readme():
     return (ROOT / "README.md").read_text(encoding="utf-8").replace("\r\n", "\n")
 
 
-def frontmatter():
+def test_readme_has_no_hugging_face_setup():
     text = readme()
-    assert text.startswith("---\n")
-    block = text.split("---\n")[1]
-    return dict(line.split(": ", 1) for line in block.strip().splitlines())
+    assert text.startswith("# Portfolio Risk Analyzer")
+    assert "huggingface" not in text.lower()
 
 
-def test_frontmatter_matches_docker_space():
-    meta = frontmatter()
-    assert meta["sdk"] == "docker"
-    assert meta["app_port"] == "7860"
-    assert len(meta["short_description"]) <= 60
+def test_readme_explains_running_locally_and_with_docker():
+    text = readme()
+    assert "streamlit run app.py" in text
+    assert "docker run" in text
 
 
 def test_referenced_screenshots_exist():

@@ -7,12 +7,13 @@ def read(name):
     return (ROOT / name).read_text(encoding="utf-8").replace("\r\n", "\n")
 
 
-def test_dockerfile_serves_streamlit_on_7860_with_python_312():
+def test_dockerfile_serves_streamlit_on_its_default_port_with_python_312():
     dockerfile = read("Dockerfile")
     assert dockerfile.startswith("FROM python:3.12-slim")
-    assert "--server.port=7860" in dockerfile
+    assert "--server.port=8501" in dockerfile
     assert "--server.address=0.0.0.0" in dockerfile
-    assert "EXPOSE 7860" in dockerfile
+    assert "EXPOSE 8501" in dockerfile
+    assert "Hugging Face" not in dockerfile
 
 
 def test_dockerignore_keeps_sample_data_in_image():
@@ -21,13 +22,10 @@ def test_dockerignore_keeps_sample_data_in_image():
     assert ".venv" in ignored
 
 
-def test_ci_checks_out_lfs_and_deploys_only_after_tests():
+def test_ci_runs_tests_with_lfs_and_has_no_deploy_job():
     ci = read(".github/workflows/ci.yml")
     assert "lfs: true" in ci
-    assert "needs: test" in ci
     assert 'python-version: "3.12"' in ci
-
-
-def test_deploy_fetches_all_lfs_objects_before_force_push():
-    ci = read(".github/workflows/ci.yml")
-    assert ci.index("git lfs fetch --all") < ci.index("git push --force")
+    assert "pytest" in ci
+    assert "deploy" not in ci
+    assert "huggingface" not in ci.lower()
